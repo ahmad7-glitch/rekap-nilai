@@ -22,6 +22,8 @@ export default function GuruDashboard() {
     const [assignments, setAssignments] = useState<TeachingAssignment[]>([])
     const [loading, setLoading] = useState(true)
 
+    const [notLinked, setNotLinked] = useState(false)
+
     useEffect(() => {
         if (!authLoading) {
             if (profile) loadData()
@@ -31,14 +33,36 @@ export default function GuruDashboard() {
 
     const loadData = async () => {
         try {
-            // Find teacher record by email
-            const { data: teacher } = await supabase
+            // Try to find teacher by user_id first, then fall back to email
+            let { data: teacher } = await supabase
                 .from('teachers')
-                .select('id')
-                .eq('email', profile?.email)
-                .single()
+                .select('id, user_id')
+                .eq('user_id', profile?.id)
+                .maybeSingle()
 
-            if (!teacher) return
+            if (!teacher) {
+                // Fall back to email lookup
+                const res = await supabase
+                    .from('teachers')
+                    .select('id, user_id')
+                    .eq('email', profile?.email)
+                    .maybeSingle()
+                teacher = res.data
+
+                // Auto-link user_id on first login
+                if (teacher && !teacher.user_id && profile?.id) {
+                    const { error: linkError } = await supabase
+                        .from('teachers')
+                        .update({ user_id: profile.id })
+                        .eq('id', teacher.id)
+                    if (linkError) console.error('Auto-link user_id error:', linkError.message)
+                }
+            }
+
+            if (!teacher) {
+                setNotLinked(true)
+                return
+            }
 
             const { data: mappings } = await supabase
                 .from('teacher_subjects')
@@ -101,6 +125,12 @@ export default function GuruDashboard() {
                 <div className="flex items-center justify-center py-12">
                     <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                 </div>
+            ) : notLinked ? (
+                <Card>
+                    <p className="text-red-400 text-center py-8">
+                        Data guru tidak ditemukan untuk akun ini. Pastikan email akun Anda (<strong>{profile?.email}</strong>) sesuai dengan email yang didaftarkan oleh admin di halaman Data Guru.
+                    </p>
+                </Card>
             ) : assignments.length === 0 ? (
                 <Card>
                     <p className="text-gray-500 text-center py-8">Belum ada penugasan mengajar. Hubungi admin.</p>

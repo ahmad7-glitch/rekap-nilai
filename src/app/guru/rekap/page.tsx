@@ -30,11 +30,31 @@ export default function RekapPage() {
 
     const loadAssignments = async () => {
         try {
-            const { data: teacher } = await supabase
+            // Try to find teacher by user_id first, then fall back to email
+            let { data: teacher } = await supabase
                 .from('teachers')
-                .select('id')
-                .eq('email', profile?.email)
-                .single()
+                .select('id, user_id')
+                .eq('user_id', profile?.id)
+                .maybeSingle()
+
+            if (!teacher) {
+                // Fall back to email lookup
+                const res = await supabase
+                    .from('teachers')
+                    .select('id, user_id')
+                    .eq('email', profile?.email)
+                    .maybeSingle()
+                teacher = res.data
+
+                // Auto-link user_id on first login
+                if (teacher && !teacher.user_id && profile?.id) {
+                    const { error: linkError } = await supabase
+                        .from('teachers')
+                        .update({ user_id: profile.id })
+                        .eq('id', teacher.id)
+                    if (linkError) console.error('Auto-link user_id error:', linkError.message)
+                }
+            }
 
             if (!teacher) return
 

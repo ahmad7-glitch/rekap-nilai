@@ -36,7 +36,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }, [profile, loading, pathname, router])
 
     if (loading) return <LoadingScreen />
-    if (!user || !profile) return null
+    if (!user || !profile) return <LoadingScreen />
 
     return (
         <div className="flex min-h-screen bg-gray-950">
