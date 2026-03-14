@@ -25,11 +25,12 @@ export default function AdminDashboard() {
 
     const loadStats = async () => {
         try {
-            const [students, teachers, classes, subjects] = await Promise.all([
+            const [students, teachers, classes, subjects, recentRes] = await Promise.all([
                 supabase.from('students').select('id', { count: 'exact', head: true }),
                 supabase.from('teachers').select('id', { count: 'exact', head: true }),
                 supabase.from('classes').select('id', { count: 'exact', head: true }),
                 supabase.from('subjects').select('id', { count: 'exact', head: true }),
+                supabase.from('students').select('id, full_name, nis, classes(name)').order('created_at', { ascending: false }).limit(5)
             ])
 
             setStats({
@@ -39,13 +40,7 @@ export default function AdminDashboard() {
                 totalSubjects: subjects.count || 0,
             })
 
-            // Recent students
-            const { data: recent } = await supabase
-                .from('students')
-                .select('*, classes(name)')
-                .order('created_at', { ascending: false })
-                .limit(5)
-            setRecentStudents(recent || [])
+            setRecentStudents(recentRes.data || [])
         } catch (err) {
             console.error(err)
         } finally {

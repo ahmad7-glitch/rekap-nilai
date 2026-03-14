@@ -24,16 +24,28 @@ export default function OrangTuaDashboard() {
 
     const loadData = async () => {
         try {
-            // Find children by parent_user_id
-            const { data: childrenData } = await supabase
-                .from('students')
-                .select('*, classes(name)')
-                .eq('parent_user_id', profile?.id)
+            // Find children and active semester concurrently
+            const [childrenRes, activeSemRes] = await Promise.all([
+                supabase
+                    .from('students')
+                    .select('*, classes(name)')
+                    .eq('parent_user_id', profile?.id),
+                supabase
+                    .from('semesters')
+                    .select('*')
+                    .eq('is_active', true)
+                    .single()
+            ])
+
+            const childrenData = childrenRes.data
+            const activeSem = activeSemRes.data
 
             if (childrenData && childrenData.length > 0) {
                 setChildren(childrenData)
                 setSelectedChild(childrenData[0])
-                await loadScores(childrenData[0].id)
+                if (activeSem) {
+                    await fetchScores(childrenData[0].id, activeSem.id)
+                }
             }
         } catch (err) {
             console.error('loadData error:', err)
@@ -51,24 +63,28 @@ export default function OrangTuaDashboard() {
                 .single()
 
             if (activeSem) {
-                const { data: scoresData } = await supabase
-                    .from('scores')
-                    .select('*, subjects(name, code), score_types(code)')
-                    .eq('student_id', studentId)
-                    .eq('semester_id', activeSem.id)
-
-                setScores(scoresData || [])
-
-                const uniqueSubjects = [...new Set((scoresData || []).map((s: any) => s.subject_id))]
-                    .map(id => {
-                        const score = (scoresData || []).find((s: any) => s.subject_id === id)
-                        return { id, name: score?.subjects?.name || '' }
-                    })
-                setSubjects(uniqueSubjects)
+                await fetchScores(studentId, activeSem.id)
             }
         } catch (err) {
             console.error('loadScores error:', err)
         }
+    }
+
+    const fetchScores = async (studentId: string, semesterId: string) => {
+        const { data: scoresData } = await supabase
+            .from('scores')
+            .select('*, subjects(name, code), score_types(code)')
+            .eq('student_id', studentId)
+            .eq('semester_id', semesterId)
+
+        setScores(scoresData || [])
+
+        const uniqueSubjects = [...new Set((scoresData || []).map((s: any) => s.subject_id))]
+            .map(id => {
+                const score = (scoresData || []).find((s: any) => s.subject_id === id)
+                return { id, name: score?.subjects?.name || '' }
+            })
+        setSubjects(uniqueSubjects)
     }
 
     const getAvg = (subjectId: string, code: string) => {
@@ -113,7 +129,7 @@ export default function OrangTuaDashboard() {
 
             <Card className="overflow-hidden p-0">
                 <div className="overflow-x-auto">
-                    <table className="w-full">
+                    <table className="w-full min-w-[600px]">
                         <thead>
                             <tr className="border-b border-white/5">
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase">Mata Pelajaran</th>

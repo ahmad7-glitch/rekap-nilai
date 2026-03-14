@@ -166,7 +166,7 @@ export default function KepalaSekolahDashboard() {
             {selectedSubject && (
                 <Card className="overflow-hidden p-0">
                     <div className="overflow-x-auto">
-                        <table className="w-full">
+                        <table className="w-full min-w-[600px]">
                             <thead>
                                 <tr className="border-b border-white/5">
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase">No</th>

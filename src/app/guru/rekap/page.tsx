@@ -57,20 +57,21 @@ export default function RekapPage() {
             const assignment = assignments.find(a => a.id === selectedAssignment)
             if (!assignment) return
 
-            const { data: studentsData } = await supabase
-                .from('students')
-                .select('*')
-                .eq('class_id', assignment.class_id)
-                .order('full_name')
+            const [studentsRes, scoresRes] = await Promise.all([
+                supabase
+                    .from('students')
+                    .select('*')
+                    .eq('class_id', assignment.class_id)
+                    .order('full_name'),
+                supabase
+                    .from('scores')
+                    .select('*, score_types(code, name)')
+                    .eq('subject_id', assignment.subject_id)
+                    .eq('semester_id', assignment.semester_id)
+            ])
 
-            const { data: scoresData } = await supabase
-                .from('scores')
-                .select('*, score_types(code, name)')
-                .eq('subject_id', assignment.subject_id)
-                .eq('semester_id', assignment.semester_id)
-
-            setStudents(studentsData || [])
-            setScores(scoresData || [])
+            setStudents(studentsRes.data || [])
+            setScores(scoresRes.data || [])
         } catch (err) {
             console.error('loadScores error:', err)
         } finally {

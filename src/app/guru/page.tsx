@@ -31,7 +31,8 @@ export default function GuruDashboard() {
 
     const loadData = async () => {
         try {
-            // Find teacher record by email
+            // Fetch teacher and mappings in one go by using user_id if we have it? 
+            // Wait, we only have profile?.email or auth info. The teacher has email.
             const { data: teacher } = await supabase
                 .from('teachers')
                 .select('id')
@@ -42,7 +43,7 @@ export default function GuruDashboard() {
 
             const { data: mappings } = await supabase
                 .from('teacher_subjects')
-                .select('*, subjects(name), classes(name), semesters(semester_number, is_active, school_years(name))')
+                .select('id, class_id, subject_id, semester_id, subjects(name), classes(name), semesters(semester_number, is_active, school_years(name))')
                 .eq('teacher_id', teacher.id)
 
             if (mappings) {

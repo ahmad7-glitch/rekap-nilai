@@ -44,33 +44,30 @@ function InputNilaiContent() {
     const [saveMessage, setSaveMessage] = useState('')
 
     useEffect(() => {
-        if (classId && subjectId && semesterId) loadData()
+        if (classId && subjectId && semesterId) {
+            loadData()
+        } else {
+            setLoading(false)
+        }
     }, [classId, subjectId, semesterId])
 
     const loadData = async () => {
         setLoading(true)
         try {
-            const [classRes, subjectRes] = await Promise.all([
+            const [classRes, subjectRes, studentsRes, typesRes] = await Promise.all([
                 supabase.from('classes').select('name').eq('id', classId).single(),
                 supabase.from('subjects').select('name').eq('id', subjectId).single(),
+                supabase.from('students').select('*').eq('class_id', classId).order('full_name'),
+                supabase.from('score_types').select('*').eq('semester_id', semesterId)
             ])
+
             setClassName(classRes.data?.name || '')
             setSubjectName(subjectRes.data?.name || '')
 
-            const { data: studentsData } = await supabase
-                .from('students')
-                .select('*')
-                .eq('class_id', classId)
-                .order('full_name')
+            const studentsData = studentsRes.data || []
+            setStudents(studentsData)
 
-            setStudents(studentsData || [])
-
-            const { data: types } = await supabase
-                .from('score_types')
-                .select('*')
-                .eq('semester_id', semesterId)
-
-            let currentTypes = types || []
+            let currentTypes = typesRes.data || []
 
             if (currentTypes.length === 0) {
                 const defaultTypes = [
@@ -84,12 +81,17 @@ function InputNilaiContent() {
             }
             setScoreTypes(currentTypes)
 
-            const { data: existingScores } = await supabase
-                .from('scores')
-                .select('*, score_types(code)')
-                .eq('subject_id', subjectId)
-                .eq('semester_id', semesterId)
-                .in('student_id', (studentsData || []).map(s => s.id))
+            let existingScores: any = []
+            if (studentsData && studentsData.length > 0) {
+                const { data } = await supabase
+                    .from('scores')
+                    .select('*, score_types(code)')
+                    .eq('subject_id', subjectId)
+                    .eq('semester_id', semesterId)
+                    .in('student_id', studentsData.map(s => s.id))
+                
+                existingScores = data || []
+            }
 
             const entries: { [tab: string]: ScoreEntry[] } = {}
             const cols: { [tab: string]: number } = { harian: 3, tugas: 3, uts: 1, uas: 1 }
@@ -146,56 +148,61 @@ function InputNilaiContent() {
         setSaving(true)
         setSaveMessage('')
 
-        const tab = TABS.find(t => t.key === activeTab)
-        if (!tab) { setSaving(false); return }
+        try {
+            const tab = TABS.find(t => t.key === activeTab)
+            if (!tab) { setSaving(false); return }
 
-        const scoreType = scoreTypes.find((st: any) => st.code === tab.code)
-        if (!scoreType) {
-            setSaveMessage('Error: Score type not found')
-            setSaving(false)
-            return
-        }
+            const scoreType = scoreTypes.find((st: any) => st.code === tab.code)
+            if (!scoreType) {
+                setSaveMessage('Error: Score type not found')
+                setSaving(false)
+                return
+            }
 
-        const entries2 = scoreEntries[activeTab] || []
-        const scoresToUpsert: any[] = []
+            const entries2 = scoreEntries[activeTab] || []
+            const scoresToUpsert: any[] = []
 
-        entries2.forEach(entry => {
-            Object.entries(entry.scores).forEach(([num, value]) => {
-                if (value !== '' && value !== null) {
-                    scoresToUpsert.push({
-                        student_id: entry.student_id,
-                        subject_id: subjectId,
-                        score_type_id: scoreType.id,
-                        semester_id: semesterId,
-                        score_number: parseInt(num),
-                        value: Number(value),
-                    })
-                }
+            entries2.forEach(entry => {
+                Object.entries(entry.scores).forEach(([num, value]) => {
+                    if (value !== '' && value !== null) {
+                        scoresToUpsert.push({
+                            student_id: entry.student_id,
+                            subject_id: subjectId,
+                            score_type_id: scoreType.id,
+                            semester_id: semesterId,
+                            score_number: parseInt(num),
+                            value: Number(value),
+                        })
+                    }
+                })
             })
-        })
 
-        await supabase
-            .from('scores')
-            .delete()
-            .eq('subject_id', subjectId)
-            .eq('semester_id', semesterId)
-            .eq('score_type_id', scoreType.id)
+            await supabase
+                .from('scores')
+                .delete()
+                .eq('subject_id', subjectId)
+                .eq('semester_id', semesterId)
+                .eq('score_type_id', scoreType.id)
 
-        if (scoresToUpsert.length > 0) {
-            const { error } = await supabase.from('scores').insert(scoresToUpsert)
-            if (error) {
-                setSaveMessage('Error menyimpan nilai')
-                console.error(error)
+            if (scoresToUpsert.length > 0) {
+                const { error } = await supabase.from('scores').insert(scoresToUpsert)
+                if (error) {
+                    setSaveMessage('Error menyimpan nilai')
+                    console.error(error)
+                } else {
+                    setSaveMessage('Nilai berhasil disimpan!')
+                    setTimeout(() => setSaveMessage(''), 3000)
+                }
             } else {
                 setSaveMessage('Nilai berhasil disimpan!')
                 setTimeout(() => setSaveMessage(''), 3000)
             }
-        } else {
-            setSaveMessage('Nilai berhasil disimpan!')
-            setTimeout(() => setSaveMessage(''), 3000)
+        } catch (err) {
+            setSaveMessage('Error: Terjadi kesalahan saat menyimpan')
+            console.error(err)
+        } finally {
+            setSaving(false)
         }
-
-        setSaving(false)
     }
 
     const getAverage = (studentId: string, tab: string): number | null => {
@@ -210,6 +217,20 @@ function InputNilaiContent() {
         return (
             <div className="flex items-center justify-center min-h-[50vh]">
                 <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+        )
+    }
+
+    if (!classId || !subjectId || !semesterId) {
+        return (
+            <div className="animate-fade-in text-center py-10">
+                <h3 className="text-xl font-semibold text-white mb-2">Silakan pilih kelas dan mata pelajaran</h3>
+                <p className="text-gray-400 mb-6">Anda harus memilih kelas dan mata pelajaran dari dashboard terlebih dahulu.</p>
+                <Link href="/guru">
+                    <Button icon={<HiOutlineChevronLeft className="w-4 h-4" />}>
+                        Kembali ke Dashboard
+                    </Button>
+                </Link>
             </div>
         )
     }
@@ -271,7 +292,7 @@ function InputNilaiContent() {
             ) : (
                 <Card className="overflow-hidden p-0">
                     <div className="overflow-x-auto">
-                        <table className="w-full">
+                        <table className="w-full min-w-[800px]">
                             <thead>
                                 <tr className="border-b border-white/5">
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider w-12">No</th>
@@ -338,7 +359,7 @@ function RekapTable({ students, getAverage }: { students: Student[]; getAverage:
     return (
         <Card className="overflow-hidden p-0">
             <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[800px]">
                     <thead>
                         <tr className="border-b border-white/5">
                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase w-12">No</th>

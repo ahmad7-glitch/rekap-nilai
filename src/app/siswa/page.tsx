@@ -35,22 +35,25 @@ export default function SiswaDashboard() {
 
     const loadData = async () => {
         try {
-            // Find student by user_id
-            const { data: studentData } = await supabase
-                .from('students')
-                .select('*, classes(name)')
-                .eq('user_id', profile?.id)
-                .single()
+            // Find student and active semester concurrently
+            const [studentRes, activeSemRes] = await Promise.all([
+                supabase
+                    .from('students')
+                    .select('*, classes(name)')
+                    .eq('user_id', profile?.id)
+                    .single(),
+                supabase
+                    .from('semesters')
+                    .select('*, school_years(name)')
+                    .eq('is_active', true)
+                    .single()
+            ])
+
+            const studentData = studentRes.data
+            const activeSem = activeSemRes.data
 
             if (!studentData) return
             setStudent(studentData)
-
-            // Get active semester
-            const { data: activeSem } = await supabase
-                .from('semesters')
-                .select('*, school_years(name)')
-                .eq('is_active', true)
-                .single()
 
             if (activeSem) {
                 // Get scores for this student
@@ -181,7 +184,7 @@ export default function SiswaDashboard() {
 
             <Card className="overflow-hidden p-0">
                 <div className="overflow-x-auto">
-                    <table className="w-full">
+                    <table className="w-full min-w-[600px]">
                         <thead>
                             <tr className="border-b border-white/5">
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase">Mata Pelajaran</th>

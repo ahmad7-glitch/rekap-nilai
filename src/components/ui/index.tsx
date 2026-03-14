@@ -288,7 +288,7 @@ export function Table<T extends Record<string, unknown>>({
     return (
         <div className="bg-gray-800/50 backdrop-blur-sm border border-white/5 rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[600px]">
                     <thead>
                         <tr className="border-b border-white/5">
                             {columns.map(col => (
