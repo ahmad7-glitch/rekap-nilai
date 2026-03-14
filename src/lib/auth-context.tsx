@@ -21,22 +21,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true)
 
     const fetchProfile = async (userId: string) => {
-        const { data } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .single()
-        if (data) setProfile(data as Profile)
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .single()
+            if (error) console.error('Error fetching profile:', error.message)
+            if (data) setProfile(data as Profile)
+        } catch (err) {
+            console.error('fetchProfile error:', err)
+        }
     }
 
     useEffect(() => {
         const getSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession()
-            if (session?.user) {
-                setUser(session.user)
-                await fetchProfile(session.user.id)
+            try {
+                const { data: { session } } = await supabase.auth.getSession()
+                if (session?.user) {
+                    setUser(session.user)
+                    await fetchProfile(session.user.id)
+                }
+            } catch (err) {
+                console.error('getSession error:', err)
+            } finally {
+                setLoading(false)
             }
-            setLoading(false)
         }
         getSession()
 

@@ -8,7 +8,7 @@ import { calculateNilaiAkhir, getPredikat, getPredikatColor } from '@/lib/types'
 import { HiOutlineClipboardList, HiOutlineAcademicCap, HiOutlineStar } from 'react-icons/hi'
 
 export default function OrangTuaDashboard() {
-    const { profile } = useAuth()
+    const { profile, loading: authLoading } = useAuth()
     const [children, setChildren] = useState<any[]>([])
     const [selectedChild, setSelectedChild] = useState<any>(null)
     const [scores, setScores] = useState<any[]>([])
@@ -16,46 +16,58 @@ export default function OrangTuaDashboard() {
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        if (profile) loadData()
-    }, [profile])
+        if (!authLoading) {
+            if (profile) loadData()
+            else setLoading(false)
+        }
+    }, [profile, authLoading])
 
     const loadData = async () => {
-        // Find children by parent_user_id
-        const { data: childrenData } = await supabase
-            .from('students')
-            .select('*, classes(name)')
-            .eq('parent_user_id', profile?.id)
+        try {
+            // Find children by parent_user_id
+            const { data: childrenData } = await supabase
+                .from('students')
+                .select('*, classes(name)')
+                .eq('parent_user_id', profile?.id)
 
-        if (childrenData && childrenData.length > 0) {
-            setChildren(childrenData)
-            setSelectedChild(childrenData[0])
-            await loadScores(childrenData[0].id)
+            if (childrenData && childrenData.length > 0) {
+                setChildren(childrenData)
+                setSelectedChild(childrenData[0])
+                await loadScores(childrenData[0].id)
+            }
+        } catch (err) {
+            console.error('loadData error:', err)
+        } finally {
+            setLoading(false)
         }
-        setLoading(false)
     }
 
     const loadScores = async (studentId: string) => {
-        const { data: activeSem } = await supabase
-            .from('semesters')
-            .select('*')
-            .eq('is_active', true)
-            .single()
+        try {
+            const { data: activeSem } = await supabase
+                .from('semesters')
+                .select('*')
+                .eq('is_active', true)
+                .single()
 
-        if (activeSem) {
-            const { data: scoresData } = await supabase
-                .from('scores')
-                .select('*, subjects(name, code), score_types(code)')
-                .eq('student_id', studentId)
-                .eq('semester_id', activeSem.id)
+            if (activeSem) {
+                const { data: scoresData } = await supabase
+                    .from('scores')
+                    .select('*, subjects(name, code), score_types(code)')
+                    .eq('student_id', studentId)
+                    .eq('semester_id', activeSem.id)
 
-            setScores(scoresData || [])
+                setScores(scoresData || [])
 
-            const uniqueSubjects = [...new Set((scoresData || []).map((s: any) => s.subject_id))]
-                .map(id => {
-                    const score = (scoresData || []).find((s: any) => s.subject_id === id)
-                    return { id, name: score?.subjects?.name || '' }
-                })
-            setSubjects(uniqueSubjects)
+                const uniqueSubjects = [...new Set((scoresData || []).map((s: any) => s.subject_id))]
+                    .map(id => {
+                        const score = (scoresData || []).find((s: any) => s.subject_id === id)
+                        return { id, name: score?.subjects?.name || '' }
+                    })
+                setSubjects(uniqueSubjects)
+            }
+        } catch (err) {
+            console.error('loadScores error:', err)
         }
     }
 

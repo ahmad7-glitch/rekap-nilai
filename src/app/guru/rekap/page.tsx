@@ -9,7 +9,7 @@ import { HiOutlineDownload } from 'react-icons/hi'
 import * as XLSX from 'xlsx'
 
 export default function RekapPage() {
-    const { profile } = useAuth()
+    const { profile, loading: authLoading } = useAuth()
     const [assignments, setAssignments] = useState<any[]>([])
     const [selectedAssignment, setSelectedAssignment] = useState('')
     const [students, setStudents] = useState<any[]>([])
@@ -18,51 +18,64 @@ export default function RekapPage() {
     const [loadingScores, setLoadingScores] = useState(false)
 
     useEffect(() => {
-        if (profile) loadAssignments()
-    }, [profile])
+        if (!authLoading) {
+            if (profile) loadAssignments()
+            else setLoading(false)
+        }
+    }, [profile, authLoading])
 
     useEffect(() => {
         if (selectedAssignment) loadScores()
     }, [selectedAssignment])
 
     const loadAssignments = async () => {
-        const { data: teacher } = await supabase
-            .from('teachers')
-            .select('id')
-            .eq('email', profile?.email)
-            .single()
+        try {
+            const { data: teacher } = await supabase
+                .from('teachers')
+                .select('id')
+                .eq('email', profile?.email)
+                .single()
 
-        if (!teacher) { setLoading(false); return }
+            if (!teacher) return
 
-        const { data } = await supabase
-            .from('teacher_subjects')
-            .select('*, subjects(name), classes(name), semesters(semester_number, school_years(name))')
-            .eq('teacher_id', teacher.id)
+            const { data } = await supabase
+                .from('teacher_subjects')
+                .select('*, subjects(name), classes(name), semesters(semester_number, school_years(name))')
+                .eq('teacher_id', teacher.id)
 
-        setAssignments(data || [])
-        setLoading(false)
+            setAssignments(data || [])
+        } catch (err) {
+            console.error('loadAssignments error:', err)
+        } finally {
+            setLoading(false)
+        }
     }
 
     const loadScores = async () => {
         setLoadingScores(true)
-        const assignment = assignments.find(a => a.id === selectedAssignment)
-        if (!assignment) { setLoadingScores(false); return }
+        try {
+            const assignment = assignments.find(a => a.id === selectedAssignment)
+            if (!assignment) return
 
-        const { data: studentsData } = await supabase
-            .from('students')
-            .select('*')
-            .eq('class_id', assignment.class_id)
-            .order('full_name')
+            const { data: studentsData } = await supabase
+                .from('students')
+                .select('*')
+                .eq('class_id', assignment.class_id)
+                .order('full_name')
 
-        const { data: scoresData } = await supabase
-            .from('scores')
-            .select('*, score_types(code, name)')
-            .eq('subject_id', assignment.subject_id)
-            .eq('semester_id', assignment.semester_id)
+            const { data: scoresData } = await supabase
+                .from('scores')
+                .select('*, score_types(code, name)')
+                .eq('subject_id', assignment.subject_id)
+                .eq('semester_id', assignment.semester_id)
 
-        setStudents(studentsData || [])
-        setScores(scoresData || [])
-        setLoadingScores(false)
+            setStudents(studentsData || [])
+            setScores(scoresData || [])
+        } catch (err) {
+            console.error('loadScores error:', err)
+        } finally {
+            setLoadingScores(false)
+        }
     }
 
     const getAvgForStudent = (studentId: string, code: string) => {

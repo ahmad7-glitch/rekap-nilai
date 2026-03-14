@@ -27,75 +27,89 @@ export default function KepalaSekolahDashboard() {
     }, [selectedClass, selectedSubject])
 
     const loadInitial = async () => {
-        const [s, t, c] = await Promise.all([
-            supabase.from('students').select('id', { count: 'exact', head: true }),
-            supabase.from('teachers').select('id', { count: 'exact', head: true }),
-            supabase.from('classes').select('*').order('level').order('name'),
-        ])
-        setStats({ students: s.count || 0, teachers: t.count || 0, classes: c.data?.length || 0 })
-        setClasses(c.data || [])
-        setLoading(false)
+        try {
+            const [s, t, c] = await Promise.all([
+                supabase.from('students').select('id', { count: 'exact', head: true }),
+                supabase.from('teachers').select('id', { count: 'exact', head: true }),
+                supabase.from('classes').select('*').order('level').order('name'),
+            ])
+            setStats({ students: s.count || 0, teachers: t.count || 0, classes: c.data?.length || 0 })
+            setClasses(c.data || [])
+        } catch (err) {
+            console.error('loadInitial error:', err)
+        } finally {
+            setLoading(false)
+        }
     }
 
     const loadSubjects = async () => {
-        const { data: activeSem } = await supabase
-            .from('semesters')
-            .select('*')
-            .eq('is_active', true)
-            .single()
+        try {
+            const { data: activeSem } = await supabase
+                .from('semesters')
+                .select('*')
+                .eq('is_active', true)
+                .single()
 
-        if (activeSem) {
-            const { data: mappings } = await supabase
-                .from('teacher_subjects')
-                .select('subject_id, subjects(name)')
-                .eq('class_id', selectedClass)
-                .eq('semester_id', activeSem.id)
+            if (activeSem) {
+                const { data: mappings } = await supabase
+                    .from('teacher_subjects')
+                    .select('subject_id, subjects(name)')
+                    .eq('class_id', selectedClass)
+                    .eq('semester_id', activeSem.id)
 
-            const unique = [...new Map((mappings || []).map((m: any) => [m.subject_id, m])).values()]
-            setSubjects(unique)
+                const unique = [...new Map((mappings || []).map((m: any) => [m.subject_id, m])).values()]
+                setSubjects(unique)
+            }
+        } catch (err) {
+            console.error('loadSubjects error:', err)
         }
     }
 
     const loadRekap = async () => {
         setLoadingRekap(true)
-        const { data: activeSem } = await supabase
-            .from('semesters')
-            .select('*')
-            .eq('is_active', true)
-            .single()
+        try {
+            const { data: activeSem } = await supabase
+                .from('semesters')
+                .select('*')
+                .eq('is_active', true)
+                .single()
 
-        if (!activeSem) { setLoadingRekap(false); return }
+            if (!activeSem) return
 
-        const { data: students } = await supabase
-            .from('students')
-            .select('*')
-            .eq('class_id', selectedClass)
-            .order('full_name')
+            const { data: students } = await supabase
+                .from('students')
+                .select('*')
+                .eq('class_id', selectedClass)
+                .order('full_name')
 
-        const { data: scores } = await supabase
-            .from('scores')
-            .select('*, score_types(code)')
-            .eq('subject_id', selectedSubject)
-            .eq('semester_id', activeSem.id)
+            const { data: scores } = await supabase
+                .from('scores')
+                .select('*, score_types(code)')
+                .eq('subject_id', selectedSubject)
+                .eq('semester_id', activeSem.id)
 
-        const getAvg = (studentId: string, code: string) => {
-            const filtered = (scores || []).filter((s: any) => s.student_id === studentId && s.score_types?.code === code)
-            if (filtered.length === 0) return null
-            return filtered.reduce((sum: number, s: any) => sum + s.value, 0) / filtered.length
+            const getAvg = (studentId: string, code: string) => {
+                const filtered = (scores || []).filter((s: any) => s.student_id === studentId && s.score_types?.code === code)
+                if (filtered.length === 0) return null
+                return filtered.reduce((sum: number, s: any) => sum + s.value, 0) / filtered.length
+            }
+
+            const rekap = (students || []).map(s => {
+                const h = getAvg(s.id, 'HARIAN')
+                const t = getAvg(s.id, 'TUGAS')
+                const u = getAvg(s.id, 'UTS')
+                const a = getAvg(s.id, 'UAS')
+                const na = calculateNilaiAkhir(h, t, u, a)
+                const pred = na !== null ? getPredikat(na) : '-'
+                return { ...s, harian: h, tugas: t, uts: u, uas: a, nilai_akhir: na, predikat: pred }
+            })
+
+            setRekapData(rekap)
+        } catch (err) {
+            console.error('loadRekap error:', err)
+        } finally {
+            setLoadingRekap(false)
         }
-
-        const rekap = (students || []).map(s => {
-            const h = getAvg(s.id, 'HARIAN')
-            const t = getAvg(s.id, 'TUGAS')
-            const u = getAvg(s.id, 'UTS')
-            const a = getAvg(s.id, 'UAS')
-            const na = calculateNilaiAkhir(h, t, u, a)
-            const pred = na !== null ? getPredikat(na) : '-'
-            return { ...s, harian: h, tugas: t, uts: u, uas: a, nilai_akhir: na, predikat: pred }
-        })
-
-        setRekapData(rekap)
-        setLoadingRekap(false)
     }
 
     return (

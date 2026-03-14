@@ -20,53 +20,61 @@ import { Bar } from 'react-chartjs-2'
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 export default function SiswaDashboard() {
-    const { profile } = useAuth()
+    const { profile, loading: authLoading } = useAuth()
     const [student, setStudent] = useState<any>(null)
     const [scores, setScores] = useState<any[]>([])
     const [subjects, setSubjects] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        if (profile) loadData()
-    }, [profile])
+        if (!authLoading) {
+            if (profile) loadData()
+            else setLoading(false)
+        }
+    }, [profile, authLoading])
 
     const loadData = async () => {
-        // Find student by user_id
-        const { data: studentData } = await supabase
-            .from('students')
-            .select('*, classes(name)')
-            .eq('user_id', profile?.id)
-            .single()
+        try {
+            // Find student by user_id
+            const { data: studentData } = await supabase
+                .from('students')
+                .select('*, classes(name)')
+                .eq('user_id', profile?.id)
+                .single()
 
-        if (!studentData) { setLoading(false); return }
-        setStudent(studentData)
+            if (!studentData) return
+            setStudent(studentData)
 
-        // Get active semester
-        const { data: activeSem } = await supabase
-            .from('semesters')
-            .select('*, school_years(name)')
-            .eq('is_active', true)
-            .single()
+            // Get active semester
+            const { data: activeSem } = await supabase
+                .from('semesters')
+                .select('*, school_years(name)')
+                .eq('is_active', true)
+                .single()
 
-        if (activeSem) {
-            // Get scores for this student
-            const { data: scoresData } = await supabase
-                .from('scores')
-                .select('*, subjects(name, code), score_types(code, name)')
-                .eq('student_id', studentData.id)
-                .eq('semester_id', activeSem.id)
+            if (activeSem) {
+                // Get scores for this student
+                const { data: scoresData } = await supabase
+                    .from('scores')
+                    .select('*, subjects(name, code), score_types(code, name)')
+                    .eq('student_id', studentData.id)
+                    .eq('semester_id', activeSem.id)
 
-            setScores(scoresData || [])
+                setScores(scoresData || [])
 
-            // Get unique subjects
-            const uniqueSubjects = [...new Set((scoresData || []).map((s: any) => s.subject_id))]
-                .map(id => {
-                    const score = (scoresData || []).find((s: any) => s.subject_id === id)
-                    return { id, name: score?.subjects?.name || '', code: score?.subjects?.code || '' }
-                })
-            setSubjects(uniqueSubjects)
+                // Get unique subjects
+                const uniqueSubjects = [...new Set((scoresData || []).map((s: any) => s.subject_id))]
+                    .map(id => {
+                        const score = (scoresData || []).find((s: any) => s.subject_id === id)
+                        return { id, name: score?.subjects?.name || '', code: score?.subjects?.code || '' }
+                    })
+                setSubjects(uniqueSubjects)
+            }
+        } catch (err) {
+            console.error('loadData error:', err)
+        } finally {
+            setLoading(false)
         }
-        setLoading(false)
     }
 
     const getAvg = (subjectId: string, code: string) => {

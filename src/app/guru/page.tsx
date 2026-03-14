@@ -18,45 +18,50 @@ interface TeachingAssignment {
 }
 
 export default function GuruDashboard() {
-    const { profile } = useAuth()
+    const { profile, loading: authLoading } = useAuth()
     const [assignments, setAssignments] = useState<TeachingAssignment[]>([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        if (profile) loadData()
-    }, [profile])
+        if (!authLoading) {
+            if (profile) loadData()
+            else setLoading(false)
+        }
+    }, [profile, authLoading])
 
     const loadData = async () => {
-        // Find teacher record by email
-        const { data: teacher } = await supabase
-            .from('teachers')
-            .select('id')
-            .eq('email', profile?.email)
-            .single()
+        try {
+            // Find teacher record by email
+            const { data: teacher } = await supabase
+                .from('teachers')
+                .select('id')
+                .eq('email', profile?.email)
+                .single()
 
-        if (!teacher) {
+            if (!teacher) return
+
+            const { data: mappings } = await supabase
+                .from('teacher_subjects')
+                .select('*, subjects(name), classes(name), semesters(semester_number, is_active, school_years(name))')
+                .eq('teacher_id', teacher.id)
+
+            if (mappings) {
+                const items = mappings.map((m: any) => ({
+                    id: m.id,
+                    class_name: m.classes?.name || '',
+                    class_id: m.class_id,
+                    subject_name: m.subjects?.name || '',
+                    subject_id: m.subject_id,
+                    semester_id: m.semester_id,
+                    semester_label: `${m.semesters?.school_years?.name || ''} - Sem ${m.semesters?.semester_number}`,
+                }))
+                setAssignments(items)
+            }
+        } catch (err) {
+            console.error('loadData error:', err)
+        } finally {
             setLoading(false)
-            return
         }
-
-        const { data: mappings } = await supabase
-            .from('teacher_subjects')
-            .select('*, subjects(name), classes(name), semesters(semester_number, is_active, school_years(name))')
-            .eq('teacher_id', teacher.id)
-
-        if (mappings) {
-            const items = mappings.map((m: any) => ({
-                id: m.id,
-                class_name: m.classes?.name || '',
-                class_id: m.class_id,
-                subject_name: m.subjects?.name || '',
-                subject_id: m.subject_id,
-                semester_id: m.semester_id,
-                semester_label: `${m.semesters?.school_years?.name || ''} - Sem ${m.semesters?.semester_number}`,
-            }))
-            setAssignments(items)
-        }
-        setLoading(false)
     }
 
     const uniqueClasses = [...new Set(assignments.map(a => a.class_name))]
