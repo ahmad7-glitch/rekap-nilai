@@ -56,14 +56,44 @@ export default function GuruPage() {
     const handleSave = async () => {
         setSaving(true)
         const payload = { ...form, phone: form.phone || null }
-        if (editing) {
-            await supabase.from('teachers').update(payload).eq('id', editing.id)
-        } else {
-            await supabase.from('teachers').insert(payload)
+        
+        try {
+            if (editing) {
+                await supabase.from('teachers').update(payload).eq('id', editing.id)
+            } else {
+                // Buat user di Auth terlebih dahulu via Edge Function yg kita buat
+                const res = await fetch('/api/admin/create-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: form.email,
+                        password: 'guru123',
+                        full_name: form.full_name,
+                        role: 'guru'
+                    })
+                })
+                
+                const authData = await res.json()
+                
+                if (!res.ok) {
+                    throw new Error(authData.error || 'Gagal membuat user auth')
+                }
+
+                // Setelah user auth terbuat (dan trigger profil jalan otomatis), 
+                // masukkan ke tabel guru beserta user_id-nya
+                await supabase.from('teachers').insert({
+                    ...payload,
+                    user_id: authData.user.id
+                })
+            }
+            setModalOpen(false)
+            loadData()
+        } catch (error: any) {
+            alert(`Error: ${error.message}`)
+            console.error(error)
+        } finally {
+            setSaving(false)
         }
-        setSaving(false)
-        setModalOpen(false)
-        loadData()
     }
 
     const handleDelete = async (id: string) => {
@@ -146,13 +176,54 @@ export default function GuruPage() {
                 }
 
                 if (formattedData.length > 0) {
-                    const { error } = await supabase.from('teachers').insert(formattedData)
-                    if (error) {
-                        setAlertConfig({ open: true, type: 'error', title: 'Gagal Mengimpor', message: 'Pastikan NIP atau Email tidak duplikat.' })
-                        console.error(error)
-                    } else {
-                        setAlertConfig({ open: true, type: 'success', title: 'Berhasil', message: `${formattedData.length} data guru berhasil diimpor.` })
+                    let successCount = 0;
+                    let errorCount = 0;
+
+                    for (const teacherData of formattedData) {
+                        try {
+                            // 1. Create di Auth Supabase
+                            const res = await fetch('/api/admin/create-user', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    email: teacherData.email,
+                                    password: 'guru123',
+                                    full_name: teacherData.full_name,
+                                    role: 'guru'
+                                })
+                            });
+
+                            const authData = await res.json();
+
+                            if (!res.ok) {
+                                console.error('Auth error for', teacherData.email, authData.error);
+                                errorCount++;
+                                continue;
+                            }
+
+                            // 2. Insert ke table teachers
+                            const { error: dbError } = await supabase.from('teachers').insert({
+                                ...teacherData,
+                                user_id: authData.user.id
+                            });
+
+                            if (dbError) {
+                                console.error('DB error for', teacherData.email, dbError);
+                                errorCount++;
+                            } else {
+                                successCount++;
+                            }
+                        } catch (err) {
+                            console.error('Unhandled error importing teacher', err);
+                            errorCount++;
+                        }
+                    }
+
+                    if (successCount > 0) {
+                        setAlertConfig({ open: true, type: 'success', title: 'Selesai', message: `${successCount} data guru berhasil diimpor & dibuat akunnya. ${errorCount > 0 ? `(${errorCount} gagal)` : ''}` })
                         loadData()
+                    } else {
+                        setAlertConfig({ open: true, type: 'error', title: 'Gagal Mengimpor', message: 'Semua data gagal diimpor. Pastikan Email belum terdaftar sebelumnya.' })
                     }
                 } else {
                     setAlertConfig({ open: true, type: 'error', title: 'Format Tidak Valid', message: 'Tidak ada data valid untuk diimpor.' })
