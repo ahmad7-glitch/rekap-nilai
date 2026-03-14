@@ -20,12 +20,17 @@ export default function TahunAjaranPage() {
 
     const loadData = async () => {
         setLoading(true)
-        const { data } = await supabase
-            .from('school_years')
-            .select('*, semesters(*)')
-            .order('created_at', { ascending: false })
-        setYears(data || [])
-        setLoading(false)
+        try {
+            const { data } = await supabase
+                .from('school_years')
+                .select('*, semesters(*)')
+                .order('created_at', { ascending: false })
+            setYears(data || [])
+        } catch (err) {
+            console.error('loadData error:', err)
+        } finally {
+            setLoading(false)
+        }
     }
 
     const openCreate = () => {

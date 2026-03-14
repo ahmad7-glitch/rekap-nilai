@@ -21,19 +21,24 @@ export default function MappingPage() {
 
     const loadData = async () => {
         setLoading(true)
-        const [mapRes, tRes, sRes, cRes, semRes] = await Promise.all([
-            supabase.from('teacher_subjects').select('*, teachers(full_name, nip), subjects(name, code), classes(name), semesters(semester_number, school_years(name))').order('created_at', { ascending: false }),
-            supabase.from('teachers').select('*').order('full_name'),
-            supabase.from('subjects').select('*').order('name'),
-            supabase.from('classes').select('*').order('level').order('name'),
-            supabase.from('semesters').select('*, school_years(name)').order('created_at', { ascending: false }),
-        ])
-        setMappings(mapRes.data || [])
-        setTeachers(tRes.data || [])
-        setSubjects(sRes.data || [])
-        setClasses(cRes.data || [])
-        setSemesters(semRes.data || [])
-        setLoading(false)
+        try {
+            const [mapRes, tRes, sRes, cRes, semRes] = await Promise.all([
+                supabase.from('teacher_subjects').select('*, teachers(full_name, nip), subjects(name, code), classes(name), semesters(semester_number, school_years(name))').order('created_at', { ascending: false }),
+                supabase.from('teachers').select('*').order('full_name'),
+                supabase.from('subjects').select('*').order('name'),
+                supabase.from('classes').select('*').order('level').order('name'),
+                supabase.from('semesters').select('*, school_years(name)').order('created_at', { ascending: false }),
+            ])
+            setMappings(mapRes.data || [])
+            setTeachers(tRes.data || [])
+            setSubjects(sRes.data || [])
+            setClasses(cRes.data || [])
+            setSemesters(semRes.data || [])
+        } catch (err) {
+            console.error('loadData error:', err)
+        } finally {
+            setLoading(false)
+        }
     }
 
     const handleSave = async () => {

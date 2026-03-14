@@ -49,69 +49,73 @@ function InputNilaiContent() {
 
     const loadData = async () => {
         setLoading(true)
+        try {
+            const [classRes, subjectRes] = await Promise.all([
+                supabase.from('classes').select('name').eq('id', classId).single(),
+                supabase.from('subjects').select('name').eq('id', subjectId).single(),
+            ])
+            setClassName(classRes.data?.name || '')
+            setSubjectName(subjectRes.data?.name || '')
 
-        const [classRes, subjectRes] = await Promise.all([
-            supabase.from('classes').select('name').eq('id', classId).single(),
-            supabase.from('subjects').select('name').eq('id', subjectId).single(),
-        ])
-        setClassName(classRes.data?.name || '')
-        setSubjectName(subjectRes.data?.name || '')
+            const { data: studentsData } = await supabase
+                .from('students')
+                .select('*')
+                .eq('class_id', classId)
+                .order('full_name')
 
-        const { data: studentsData } = await supabase
-            .from('students')
-            .select('*')
-            .eq('class_id', classId)
-            .order('full_name')
+            setStudents(studentsData || [])
 
-        setStudents(studentsData || [])
+            const { data: types } = await supabase
+                .from('score_types')
+                .select('*')
+                .eq('semester_id', semesterId)
 
-        const { data: types } = await supabase
-            .from('score_types')
-            .select('*')
-            .eq('semester_id', semesterId)
+            let currentTypes = types || []
 
-        let currentTypes = types || []
+            if (currentTypes.length === 0) {
+                const defaultTypes = [
+                    { name: 'Nilai Harian', code: 'HARIAN', weight: 30, semester_id: semesterId },
+                    { name: 'Nilai Tugas', code: 'TUGAS', weight: 20, semester_id: semesterId },
+                    { name: 'UTS', code: 'UTS', weight: 25, semester_id: semesterId },
+                    { name: 'UAS', code: 'UAS', weight: 25, semester_id: semesterId },
+                ]
+                const { data: newTypes } = await supabase.from('score_types').insert(defaultTypes).select()
+                currentTypes = newTypes || []
+            }
+            setScoreTypes(currentTypes)
 
-        if (currentTypes.length === 0) {
-            const defaultTypes = [
-                { name: 'Nilai Harian', code: 'HARIAN', weight: 30, semester_id: semesterId },
-                { name: 'Nilai Tugas', code: 'TUGAS', weight: 20, semester_id: semesterId },
-                { name: 'UTS', code: 'UTS', weight: 25, semester_id: semesterId },
-                { name: 'UAS', code: 'UAS', weight: 25, semester_id: semesterId },
-            ]
-            const { data: newTypes } = await supabase.from('score_types').insert(defaultTypes).select()
-            currentTypes = newTypes || []
-        }
-        setScoreTypes(currentTypes)
+            const { data: existingScores } = await supabase
+                .from('scores')
+                .select('*, score_types(code)')
+                .eq('subject_id', subjectId)
+                .eq('semester_id', semesterId)
+                .in('student_id', (studentsData || []).map(s => s.id))
 
-        const { data: existingScores } = await supabase
-            .from('scores')
-            .select('*, score_types(code)')
-            .eq('subject_id', subjectId)
-            .eq('semester_id', semesterId)
-            .in('student_id', (studentsData || []).map(s => s.id))
+            const entries: { [tab: string]: ScoreEntry[] } = {}
+            const cols: { [tab: string]: number } = { harian: 3, tugas: 3, uts: 1, uas: 1 }
 
-        const entries: { [tab: string]: ScoreEntry[] } = {}
-        const cols: { [tab: string]: number } = { harian: 3, tugas: 3, uts: 1, uas: 1 }
+            TABS.forEach(tab => {
+                const tabScores = (existingScores || []).filter((s: any) => s.score_types?.code === tab.code)
+                const maxNum = tabScores.reduce((max: number, s: any) => Math.max(max, s.score_number), 0)
+                if (maxNum > cols[tab.key]) cols[tab.key] = maxNum
 
-        TABS.forEach(tab => {
-            const tabScores = (existingScores || []).filter((s: any) => s.score_types?.code === tab.code)
-            const maxNum = tabScores.reduce((max: number, s: any) => Math.max(max, s.score_number), 0)
-            if (maxNum > cols[tab.key]) cols[tab.key] = maxNum
-
-            entries[tab.key] = (studentsData || []).map(student => {
-                const studentScores: { [num: number]: number | '' } = {}
-                for (let i = 1; i <= cols[tab.key]; i++) {
-                    const found = tabScores.find((s: any) => s.student_id === student.id && s.score_number === i)
-                    studentScores[i] = found ? found.value : ''
-                }
-                return { student_id: student.id, scores: studentScores }
+                entries[tab.key] = (studentsData || []).map(student => {
+                    const studentScores: { [num: number]: number | '' } = {}
+                    for (let i = 1; i <= cols[tab.key]; i++) {
+                        const found = tabScores.find((s: any) => s.student_id === student.id && s.score_number === i)
+                        studentScores[i] = found ? found.value : ''
+                    }
+                    return { student_id: student.id, scores: studentScores }
+                })
             })
-        })
 
-        setNumColumns(cols)
-        setScoreEntries(entries)
-        setLoading(false)
+            setNumColumns(cols)
+            setScoreEntries(entries)
+        } catch (err) {
+            console.error('loadData error:', err)
+        } finally {
+            setLoading(false)
+        }
     }
 
     const handleScoreChange = (tab: string, studentId: string, scoreNum: number, value: string) => {

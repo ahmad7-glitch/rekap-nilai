@@ -65,6 +65,7 @@ export default function Sidebar() {
     const { profile, signOut } = useAuth()
     const pathname = usePathname()
     const [mobileOpen, setMobileOpen] = useState(false)
+    const [signingOut, setSigningOut] = useState(false)
 
     if (!profile) return null
 
@@ -75,6 +76,15 @@ export default function Sidebar() {
             return pathname === href
         }
         return pathname.startsWith(href)
+    }
+
+    const handleSignOut = async () => {
+        setSigningOut(true)
+        try {
+            await signOut()
+        } finally {
+            setSigningOut(false)
+        }
     }
 
     const sidebarContent = (
@@ -126,11 +136,16 @@ export default function Sidebar() {
                     </div>
                 </div>
                 <button
-                    onClick={signOut}
-                    className="flex items-center gap-3 px-4 py-2.5 w-full rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-all duration-200"
+                    onClick={handleSignOut}
+                    disabled={signingOut}
+                    className="flex items-center gap-3 px-4 py-2.5 w-full rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    <HiOutlineLogout className="w-5 h-5" />
-                    Keluar
+                    {signingOut ? (
+                        <div className="w-5 h-5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                        <HiOutlineLogout className="w-5 h-5" />
+                    )}
+                    {signingOut ? 'Keluar...' : 'Keluar'}
                 </button>
             </div>
         </div>
@@ -156,7 +171,7 @@ export default function Sidebar() {
 
             {/* Sidebar */}
             <aside
-                className={`print:hidden fixed lg:static inset-y-0 left-0 z-40 w-72 bg-gray-900/95 backdrop-blur-xl border-r border-white/5 transform transition-transform duration-300 ease-in-out ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+                className={`print:hidden fixed lg:static inset-y-0 left-0 z-50 lg:z-auto w-72 bg-gray-900/95 backdrop-blur-xl border-r border-white/5 transform transition-transform duration-300 ease-in-out ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
                     }`}
             >
                 {sidebarContent}

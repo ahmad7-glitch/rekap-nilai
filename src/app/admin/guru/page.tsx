@@ -31,9 +31,14 @@ export default function GuruPage() {
 
     const loadData = async () => {
         setLoading(true)
-        const { data } = await supabase.from('teachers').select('*').order('full_name')
-        setTeachers(data || [])
-        setLoading(false)
+        try {
+            const { data } = await supabase.from('teachers').select('*').order('full_name')
+            setTeachers(data || [])
+        } catch (err) {
+            console.error('loadData error:', err)
+        } finally {
+            setLoading(false)
+        }
     }
 
     const openCreate = () => {

@@ -33,13 +33,18 @@ export default function SiswaPage() {
 
     const loadData = async () => {
         setLoading(true)
-        const [studentsRes, classesRes] = await Promise.all([
-            supabase.from('students').select('*, classes(name)').order('full_name'),
-            supabase.from('classes').select('*').order('level').order('name'),
-        ])
-        setStudents(studentsRes.data || [])
-        setClasses(classesRes.data || [])
-        setLoading(false)
+        try {
+            const [studentsRes, classesRes] = await Promise.all([
+                supabase.from('students').select('*, classes(name)').order('full_name'),
+                supabase.from('classes').select('*').order('level').order('name'),
+            ])
+            setStudents(studentsRes.data || [])
+            setClasses(classesRes.data || [])
+        } catch (err) {
+            console.error('loadData error:', err)
+        } finally {
+            setLoading(false)
+        }
     }
 
     const openCreate = () => {

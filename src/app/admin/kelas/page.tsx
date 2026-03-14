@@ -18,13 +18,18 @@ export default function KelasPage() {
 
     const loadData = async () => {
         setLoading(true)
-        const { data } = await supabase
-            .from('classes')
-            .select('*')
-            .order('level')
-            .order('name')
-        setClasses(data || [])
-        setLoading(false)
+        try {
+            const { data } = await supabase
+                .from('classes')
+                .select('*')
+                .order('level')
+                .order('name')
+            setClasses(data || [])
+        } catch (err) {
+            console.error('loadData error:', err)
+        } finally {
+            setLoading(false)
+        }
     }
 
     const openCreate = () => {

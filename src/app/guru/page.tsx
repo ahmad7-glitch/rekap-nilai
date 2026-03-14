@@ -18,45 +18,74 @@ interface TeachingAssignment {
 }
 
 export default function GuruDashboard() {
-    const { profile } = useAuth()
+    const { profile, loading: authLoading } = useAuth()
     const [assignments, setAssignments] = useState<TeachingAssignment[]>([])
     const [loading, setLoading] = useState(true)
 
+    const [notLinked, setNotLinked] = useState(false)
+
     useEffect(() => {
-        if (profile) loadData()
-    }, [profile])
+        if (!authLoading) {
+            if (profile) loadData()
+            else setLoading(false)
+        }
+    }, [profile, authLoading])
 
     const loadData = async () => {
-        // Find teacher record by email
-        const { data: teacher } = await supabase
-            .from('teachers')
-            .select('id')
-            .eq('email', profile?.email)
-            .single()
+        try {
+            // Try to find teacher by user_id first, then fall back to email
+            let { data: teacher } = await supabase
+                .from('teachers')
+                .select('id, user_id')
+                .eq('user_id', profile?.id)
+                .maybeSingle()
 
-        if (!teacher) {
+            if (!teacher) {
+                // Fall back to email lookup
+                const res = await supabase
+                    .from('teachers')
+                    .select('id, user_id')
+                    .eq('email', profile?.email)
+                    .maybeSingle()
+                teacher = res.data
+
+                // Auto-link user_id on first login
+                if (teacher && !teacher.user_id && profile?.id) {
+                    const { error: linkError } = await supabase
+                        .from('teachers')
+                        .update({ user_id: profile.id })
+                        .eq('id', teacher.id)
+                    if (linkError) console.error('Auto-link user_id error:', linkError.message)
+                }
+            }
+
+            if (!teacher) {
+                setNotLinked(true)
+                return
+            }
+
+            const { data: mappings } = await supabase
+                .from('teacher_subjects')
+                .select('*, subjects(name), classes(name), semesters(semester_number, is_active, school_years(name))')
+                .eq('teacher_id', teacher.id)
+
+            if (mappings) {
+                const items = mappings.map((m: any) => ({
+                    id: m.id,
+                    class_name: m.classes?.name || '',
+                    class_id: m.class_id,
+                    subject_name: m.subjects?.name || '',
+                    subject_id: m.subject_id,
+                    semester_id: m.semester_id,
+                    semester_label: `${m.semesters?.school_years?.name || ''} - Sem ${m.semesters?.semester_number}`,
+                }))
+                setAssignments(items)
+            }
+        } catch (err) {
+            console.error('loadData error:', err)
+        } finally {
             setLoading(false)
-            return
         }
-
-        const { data: mappings } = await supabase
-            .from('teacher_subjects')
-            .select('*, subjects(name), classes(name), semesters(semester_number, is_active, school_years(name))')
-            .eq('teacher_id', teacher.id)
-
-        if (mappings) {
-            const items = mappings.map((m: any) => ({
-                id: m.id,
-                class_name: m.classes?.name || '',
-                class_id: m.class_id,
-                subject_name: m.subjects?.name || '',
-                subject_id: m.subject_id,
-                semester_id: m.semester_id,
-                semester_label: `${m.semesters?.school_years?.name || ''} - Sem ${m.semesters?.semester_number}`,
-            }))
-            setAssignments(items)
-        }
-        setLoading(false)
     }
 
     const uniqueClasses = [...new Set(assignments.map(a => a.class_name))]
@@ -96,6 +125,12 @@ export default function GuruDashboard() {
                 <div className="flex items-center justify-center py-12">
                     <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                 </div>
+            ) : notLinked ? (
+                <Card>
+                    <p className="text-red-400 text-center py-8">
+                        Data guru tidak ditemukan untuk akun ini. Pastikan email akun Anda (<strong>{profile?.email}</strong>) sesuai dengan email yang didaftarkan oleh admin di halaman Data Guru.
+                    </p>
+                </Card>
             ) : assignments.length === 0 ? (
                 <Card>
                     <p className="text-gray-500 text-center py-8">Belum ada penugasan mengajar. Hubungi admin.</p>
