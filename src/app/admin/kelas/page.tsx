@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Class } from '@/lib/types'
 import { PageHeader, Button, Table, Modal, Input, Select } from '@/components/ui'
+import { useAlert } from '@/lib/alert-context'
 import { HiOutlinePlus, HiOutlinePencil, HiOutlineTrash } from 'react-icons/hi'
 
 export default function KelasPage() {
@@ -13,6 +14,7 @@ export default function KelasPage() {
     const [editing, setEditing] = useState<Class | null>(null)
     const [form, setForm] = useState({ name: '', level: '7' })
     const [saving, setSaving] = useState(false)
+    const { showAlert, showConfirm } = useAlert()
 
     useEffect(() => { loadData() }, [])
 
@@ -47,18 +49,29 @@ export default function KelasPage() {
     const handleSave = async () => {
         setSaving(true)
         const payload = { name: form.name, level: parseInt(form.level) }
-        if (editing) {
-            await supabase.from('classes').update(payload).eq('id', editing.id)
-        } else {
-            await supabase.from('classes').insert(payload)
+        try {
+            if (editing) {
+                await supabase.from('classes').update(payload).eq('id', editing.id)
+                showAlert({ type: 'success', title: 'Berhasil', message: 'Data kelas berhasil diperbarui.' })
+            } else {
+                await supabase.from('classes').insert(payload)
+                showAlert({ type: 'success', title: 'Berhasil', message: 'Data kelas berhasil ditambahkan.' })
+            }
+            setModalOpen(false)
+            loadData()
+        } catch (err: any) {
+            showAlert({ type: 'error', title: 'Gagal', message: 'Terjadi kesalahan saat menyimpan data.' })
+        } finally {
+            setSaving(false)
         }
-        setSaving(false)
-        setModalOpen(false)
-        loadData()
     }
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Hapus kelas ini?')) return
+        const confirmed = await showConfirm({
+            title: 'Hapus Kelas',
+            message: 'Apakah Anda yakin ingin menghapus kelas ini? Semua data siswa di kelas ini juga akan terhapus.'
+        })
+        if (!confirmed) return
         await supabase.from('classes').delete().eq('id', id)
         loadData()
     }

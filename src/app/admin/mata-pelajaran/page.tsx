@@ -3,7 +3,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Subject } from '@/lib/types'
-import { PageHeader, Button, Table, Modal, Input, AlertModal, Pagination } from '@/components/ui'
+import { PageHeader, Button, Table, Modal, Input, Pagination } from '@/components/ui'
+import { useAlert } from '@/lib/alert-context'
 import { HiOutlinePlus, HiOutlinePencil, HiOutlineTrash, HiOutlineUpload, HiOutlineDownload } from 'react-icons/hi'
 import * as XLSX from 'xlsx'
 
@@ -16,9 +17,7 @@ export default function MataPelajaranPage() {
     const [saving, setSaving] = useState(false)
     const [importing, setImporting] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
-    const [alertConfig, setAlertConfig] = useState<{ open: boolean, type: 'loading' | 'success' | 'error', title: string, message: string }>({
-        open: false, type: 'loading', title: '', message: ''
-    })
+    const { showAlert, showConfirm } = useAlert()
     const [currentPage, setCurrentPage] = useState(1)
     const [itemsPerPage, setItemsPerPage] = useState(15)
 
@@ -50,18 +49,29 @@ export default function MataPelajaranPage() {
 
     const handleSave = async () => {
         setSaving(true)
-        if (editing) {
-            await supabase.from('subjects').update(form).eq('id', editing.id)
-        } else {
-            await supabase.from('subjects').insert(form)
+        try {
+            if (editing) {
+                await supabase.from('subjects').update(form).eq('id', editing.id)
+                showAlert({ type: 'success', title: 'Berhasil', message: 'Mata pelajaran berhasil diperbarui.' })
+            } else {
+                await supabase.from('subjects').insert(form)
+                showAlert({ type: 'success', title: 'Berhasil', message: 'Mata pelajaran berhasil ditambahkan.' })
+            }
+            setModalOpen(false)
+            loadData()
+        } catch (err: any) {
+            showAlert({ type: 'error', title: 'Gagal', message: 'Terjadi kesalahan saat menyimpan data.' })
+        } finally {
+            setSaving(false)
         }
-        setSaving(false)
-        setModalOpen(false)
-        loadData()
     }
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Hapus mata pelajaran ini?')) return
+        const confirmed = await showConfirm({
+            title: 'Hapus Mata Pelajaran',
+            message: 'Apakah Anda yakin ingin menghapus mata pelajaran ini? Data yang sudah dihapus tidak dapat dikembalikan.'
+        })
+        if (!confirmed) return
         await supabase.from('subjects').delete().eq('id', id)
         loadData()
     }
@@ -82,11 +92,11 @@ export default function MataPelajaranPage() {
         if (!file) return
 
         setImporting(true)
-        setAlertConfig({ open: true, type: 'loading', title: 'Mengimpor Data', message: 'Memproses file Excel...' })
+        showAlert({ type: 'loading', title: 'Mengimpor Data', message: 'Memproses file Excel...' })
 
         const reader = new FileReader()
         reader.onerror = () => {
-            setAlertConfig({ open: true, type: 'error', title: 'Gagal Membaca File', message: 'File Excel tidak dapat dibaca oleh browser.' })
+            showAlert({ type: 'error', title: 'Gagal Membaca File', message: 'File Excel tidak dapat dibaca oleh browser.' })
             setImporting(false)
             if (fileInputRef.current) fileInputRef.current.value = ''
         }
@@ -132,25 +142,25 @@ export default function MataPelajaranPage() {
 
                 if (errors.length > 0) {
                     const errorMsg = 'Harap perbaiki file Excel Anda:\n\n' + errors.slice(0, 5).join('\n') + (errors.length > 5 ? '\n...dan lainnya' : '')
-                    setAlertConfig({ open: true, type: 'error', title: 'Data Tidak Sesuai', message: errorMsg })
+                    showAlert({ type: 'error', title: 'Data Tidak Sesuai', message: errorMsg })
                     return
                 }
 
                 if (formattedData.length > 0) {
                     const { error } = await supabase.from('subjects').insert(formattedData)
                     if (error) {
-                        setAlertConfig({ open: true, type: 'error', title: 'Gagal Mengimpor', message: 'Terdapat kode mata pelajaran yang sudah ada atau terjadi kesalahan database.' })
+                        showAlert({ type: 'error', title: 'Gagal Mengimpor', message: 'Terdapat kode mata pelajaran yang sudah ada atau terjadi kesalahan database.' })
                         console.error(error)
                     } else {
-                        setAlertConfig({ open: true, type: 'success', title: 'Berhasil', message: `${formattedData.length} data mata pelajaran baru berhasil ditambahkan.` })
+                        showAlert({ type: 'success', title: 'Berhasil', message: `${formattedData.length} data mata pelajaran baru berhasil ditambahkan.` })
                         loadData()
                     }
                 } else {
-                    setAlertConfig({ open: true, type: 'error', title: 'File Kosong', message: 'Tidak ada data valid yang bisa diimpor dari file tersebut.' })
+                    showAlert({ type: 'error', title: 'File Kosong', message: 'Tidak ada data valid yang bisa diimpor dari file tersebut.' })
                 }
             } catch (err) {
                 console.error('Error parsing Excel:', err)
-                setAlertConfig({ open: true, type: 'error', title: 'Gagal Membaca File', message: 'Terjadi kesalahan saat membaca file Excel.' })
+                showAlert({ type: 'error', title: 'Gagal Membaca File', message: 'Terjadi kesalahan saat membaca file Excel.' })
             } finally {
                 setImporting(false)
                 if (fileInputRef.current) fileInputRef.current.value = ''
@@ -238,10 +248,6 @@ export default function MataPelajaranPage() {
                 </div>
             </Modal>
 
-            <AlertModal
-                {...alertConfig}
-                onClose={() => setAlertConfig(prev => ({ ...prev, open: false }))}
-            />
         </div>
     )
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { SchoolYear, Semester } from '@/lib/types'
 import { PageHeader, Button, Table, Modal, Input, Badge } from '@/components/ui'
+import { useAlert } from '@/lib/alert-context'
 import { HiOutlinePlus, HiOutlinePencil, HiOutlineTrash } from 'react-icons/hi'
 
 export default function TahunAjaranPage() {
@@ -15,6 +16,7 @@ export default function TahunAjaranPage() {
     const [selectedYear, setSelectedYear] = useState<SchoolYear | null>(null)
     const [form, setForm] = useState({ name: '', start_date: '', end_date: '', is_active: false })
     const [saving, setSaving] = useState(false)
+    const { showAlert, showConfirm } = useAlert()
 
     useEffect(() => { loadData() }, [])
 
@@ -47,18 +49,29 @@ export default function TahunAjaranPage() {
 
     const handleSave = async () => {
         setSaving(true)
-        if (editingYear) {
-            await supabase.from('school_years').update(form).eq('id', editingYear.id)
-        } else {
-            await supabase.from('school_years').insert(form)
+        try {
+            if (editingYear) {
+                await supabase.from('school_years').update(form).eq('id', editingYear.id)
+                showAlert({ type: 'success', title: 'Berhasil', message: 'Tahun ajaran berhasil diperbarui.' })
+            } else {
+                await supabase.from('school_years').insert(form)
+                showAlert({ type: 'success', title: 'Berhasil', message: 'Tahun ajaran berhasil ditambahkan.' })
+            }
+            setModalOpen(false)
+            loadData()
+        } catch (err: any) {
+            showAlert({ type: 'error', title: 'Gagal', message: 'Terjadi kesalahan saat menyimpan data.' })
+        } finally {
+            setSaving(false)
         }
-        setSaving(false)
-        setModalOpen(false)
-        loadData()
     }
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Hapus tahun ajaran ini?')) return
+        const confirmed = await showConfirm({
+            title: 'Hapus Tahun Ajaran',
+            message: 'Apakah Anda yakin ingin menghapus tahun ajaran ini? Data semester dan mapping yang terkait juga akan terhapus.'
+        })
+        if (!confirmed) return
         await supabase.from('school_years').delete().eq('id', id)
         loadData()
     }

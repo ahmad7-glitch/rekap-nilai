@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Teacher, Subject, Class, Semester, SchoolYear, TeacherSubject } from '@/lib/types'
 import { PageHeader, Button, Table, Modal, Select, Badge } from '@/components/ui'
+import { useAlert } from '@/lib/alert-context'
 import { HiOutlinePlus, HiOutlineTrash } from 'react-icons/hi'
 
 export default function MappingPage() {
@@ -16,6 +17,7 @@ export default function MappingPage() {
     const [modalOpen, setModalOpen] = useState(false)
     const [form, setForm] = useState({ teacher_id: '', subject_id: '', class_id: '', semester_id: '' })
     const [saving, setSaving] = useState(false)
+    const { showAlert, showConfirm } = useAlert()
 
     useEffect(() => { loadData() }, [])
 
@@ -43,15 +45,26 @@ export default function MappingPage() {
 
     const handleSave = async () => {
         setSaving(true)
-        await supabase.from('teacher_subjects').insert(form)
-        setSaving(false)
-        setModalOpen(false)
-        setForm({ teacher_id: '', subject_id: '', class_id: '', semester_id: '' })
-        loadData()
+        try {
+            const { error } = await supabase.from('teacher_subjects').insert(form)
+            if (error) throw error
+            showAlert({ type: 'success', title: 'Berhasil', message: 'Mapping guru berhasil ditambahkan.' })
+            setModalOpen(false)
+            setForm({ teacher_id: '', subject_id: '', class_id: '', semester_id: '' })
+            loadData()
+        } catch (err: any) {
+            showAlert({ type: 'error', title: 'Gagal', message: 'Terjadi kesalahan saat menyimpan mapping.' })
+        } finally {
+            setSaving(false)
+        }
     }
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Hapus mapping ini?')) return
+        const confirmed = await showConfirm({
+            title: 'Hapus Mapping',
+            message: 'Apakah Anda yakin ingin menghapus mapping guru ini?'
+        })
+        if (!confirmed) return
         await supabase.from('teacher_subjects').delete().eq('id', id)
         loadData()
     }

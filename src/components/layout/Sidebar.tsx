@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
+import { useAlert } from '@/lib/alert-context'
 import { UserRole } from '@/lib/types'
 import {
     HiOutlineHome,
@@ -64,6 +65,8 @@ const navByRole: Record<UserRole, NavItem[]> = {
 export default function Sidebar() {
     const { profile, signOut } = useAuth()
     const pathname = usePathname()
+    const router = useRouter()
+    const { isDirty, setIsDirty, showConfirm } = useAlert()
     const [mobileOpen, setMobileOpen] = useState(false)
 
     if (!profile) return null
@@ -75,6 +78,23 @@ export default function Sidebar() {
             return pathname === href
         }
         return pathname.startsWith(href)
+    }
+
+    const handleNavigation = async (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+        if (isDirty && pathname !== href) {
+            e.preventDefault()
+            const confirmed = await showConfirm({
+                title: 'Perubahan Belum Disimpan',
+                message: 'Data belum disimpan. Ingin meninggalkan halaman ini?'
+            })
+            if (confirmed) {
+                setIsDirty(false)
+                setMobileOpen(false)
+                router.push(href)
+            }
+        } else {
+            setMobileOpen(false)
+        }
     }
 
     const sidebarContent = (
@@ -100,7 +120,7 @@ export default function Sidebar() {
                         <Link
                             key={item.href}
                             href={item.href}
-                            onClick={() => setMobileOpen(false)}
+                            onClick={(e) => handleNavigation(e, item.href)}
                             className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${active
                                 ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-white shadow-lg shadow-blue-500/10 border border-blue-500/20'
                                 : 'text-gray-400 hover:text-white hover:bg-white/5'

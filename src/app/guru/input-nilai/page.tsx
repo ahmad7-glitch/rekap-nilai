@@ -7,8 +7,10 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { Student, Score, calculateNilaiAkhir, getPredikat, getPredikatColor } from '@/lib/types'
 import { PageHeader, Button, Card, Badge, Select } from '@/components/ui'
+import { useAlert } from '@/lib/alert-context'
 import { HiOutlineSave, HiOutlineDocumentDownload, HiOutlineChevronLeft } from 'react-icons/hi'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +29,7 @@ interface ScoreEntry {
 }
 
 function InputNilaiContent() {
+    const router = useRouter()
     const searchParams = useSearchParams()
     const classId = searchParams.get('class_id') || ''
     const subjectId = searchParams.get('subject_id') || ''
@@ -42,6 +45,7 @@ function InputNilaiContent() {
     const [subjectName, setSubjectName] = useState('')
     const [scoreTypes, setScoreTypes] = useState<any[]>([])
     const [saveMessage, setSaveMessage] = useState('')
+    const { showAlert, showConfirm, isDirty, setIsDirty } = useAlert()
 
     useEffect(() => {
         if (classId && subjectId && semesterId) {
@@ -50,6 +54,18 @@ function InputNilaiContent() {
             setLoading(false)
         }
     }, [classId, subjectId, semesterId])
+
+    // Browser close/refresh warning
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (isDirty) {
+                e.preventDefault()
+                e.returnValue = ''
+            }
+        }
+        window.addEventListener('beforeunload', handleBeforeUnload)
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+    }, [isDirty])
 
     const loadData = async () => {
         setLoading(true)
@@ -113,6 +129,7 @@ function InputNilaiContent() {
 
             setNumColumns(cols)
             setScoreEntries(entries)
+            setIsDirty(false)
         } catch (err) {
             console.error('loadData error:', err)
         } finally {
@@ -142,6 +159,7 @@ function InputNilaiContent() {
                 scores: { ...entry.scores, [newNum]: '' }
             }))
         }))
+        setIsDirty(true)
     }
 
     const handleSave = async () => {
@@ -186,19 +204,12 @@ function InputNilaiContent() {
 
             if (scoresToUpsert.length > 0) {
                 const { error } = await supabase.from('scores').insert(scoresToUpsert)
-                if (error) {
-                    setSaveMessage('Error menyimpan nilai')
-                    console.error(error)
-                } else {
-                    setSaveMessage('Nilai berhasil disimpan!')
-                    setTimeout(() => setSaveMessage(''), 3000)
-                }
-            } else {
-                setSaveMessage('Nilai berhasil disimpan!')
-                setTimeout(() => setSaveMessage(''), 3000)
+                if (error) throw error
             }
+            showAlert({ type: 'success', title: 'Berhasil', message: 'Nilai berhasil disimpan!' })
+            setIsDirty(false)
         } catch (err) {
-            setSaveMessage('Error: Terjadi kesalahan saat menyimpan')
+            showAlert({ type: 'error', title: 'Gagal', message: 'Terjadi kesalahan saat menyimpan nilai' })
             console.error(err)
         } finally {
             setSaving(false)
@@ -235,12 +246,49 @@ function InputNilaiContent() {
         )
     }
 
+    const handleNavigateBack = async (e: React.MouseEvent) => {
+        if (isDirty) {
+            e.preventDefault()
+            const confirmed = await showConfirm({
+                title: 'Perubahan Belum Disimpan',
+                message: 'Anda memiliki perubahan yang belum disimpan. Yakin ingin meninggalkan halaman?'
+            })
+            if (confirmed) {
+                router.push('/guru')
+            }
+        }
+    }
+
+    const handleTabChange = async (newTab: ScoreTab | 'rekap') => {
+        if (isDirty && newTab !== activeTab) {
+            const confirmed = await showConfirm({
+                title: 'Perubahan Belum Disimpan',
+                message: 'Simpan perubahan nilai Anda sebelum berpindah tab?'
+            })
+            if (!confirmed) {
+                // User chose "Batal" (Cancel), but in our context "Batal" means "Don't leave".
+                // Actually, if they chose "Ya, Hapus/Confirm", they proceed.
+                // Let's re-word to be clearer.
+                return
+            }
+        }
+        setActiveTab(newTab)
+    }
+
     return (
         <div className="animate-fade-in">
-            <Link href="/guru" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-white mb-4 transition-colors">
-                <HiOutlineChevronLeft className="w-4 h-4" />
-                Kembali ke Dashboard
-            </Link>
+            <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
+                <Link href="/guru" onClick={handleNavigateBack} className="inline-flex items-center gap-1 hover:text-white transition-colors">
+                    <HiOutlineChevronLeft className="w-4 h-4" />
+                    Kembali ke Dashboard
+                </Link>
+                {isDirty && (
+                    <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500 text-[10px] font-bold tracking-wider uppercase border border-yellow-500/20">
+                        <span className="w-1 h-1 rounded-full bg-yellow-500 animate-pulse" />
+                        Belum Simpan
+                    </span>
+                )}
+            </div>
 
             <PageHeader
                 title={`Input Nilai - ${subjectName}`}
@@ -248,11 +296,6 @@ function InputNilaiContent() {
                 actions={
                     activeTab !== 'rekap' ? (
                         <div className="flex items-center gap-3">
-                            {saveMessage && (
-                                <span className={`text-sm ${saveMessage.includes('Error') ? 'text-red-400' : 'text-emerald-400'}`}>
-                                    {saveMessage}
-                                </span>
-                            )}
                             <Button onClick={handleSave} disabled={saving} icon={<HiOutlineSave className="w-4 h-4" />}>
                                 {saving ? 'Menyimpan...' : 'Simpan Nilai'}
                             </Button>
@@ -266,7 +309,7 @@ function InputNilaiContent() {
                 {TABS.map(tab => (
                     <button
                         key={tab.key}
-                        onClick={() => setActiveTab(tab.key)}
+                        onClick={() => handleTabChange(tab.key)}
                         className={`flex-1 min-w-fit px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === tab.key
                                 ? 'bg-blue-500/20 text-blue-400 shadow-sm border border-blue-500/20'
                                 : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -276,7 +319,7 @@ function InputNilaiContent() {
                     </button>
                 ))}
                 <button
-                    onClick={() => setActiveTab('rekap')}
+                    onClick={() => handleTabChange('rekap')}
                     className={`flex-1 min-w-fit px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'rekap'
                             ? 'bg-emerald-500/20 text-emerald-400 shadow-sm border border-emerald-500/20'
                             : 'text-gray-400 hover:text-white hover:bg-white/5'

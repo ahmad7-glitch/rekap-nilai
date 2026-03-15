@@ -3,7 +3,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Teacher } from '@/lib/types'
-import { PageHeader, Button, Table, Modal, Input, AlertModal, Pagination } from '@/components/ui'
+import { PageHeader, Button, Table, Modal, Input, Pagination } from '@/components/ui'
+import { useAlert } from '@/lib/alert-context'
 import { HiOutlinePlus, HiOutlinePencil, HiOutlineTrash, HiOutlineSearch, HiOutlineUpload, HiOutlineDownload } from 'react-icons/hi'
 import * as XLSX from 'xlsx'
 
@@ -17,9 +18,7 @@ export default function GuruPage() {
     const [search, setSearch] = useState('')
     const [importing, setImporting] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
-    const [alertConfig, setAlertConfig] = useState<{ open: boolean, type: 'loading' | 'success' | 'error', title: string, message: string }>({
-        open: false, type: 'loading', title: '', message: ''
-    })
+    const { showAlert, showConfirm } = useAlert()
     const [currentPage, setCurrentPage] = useState(1)
     const [itemsPerPage, setItemsPerPage] = useState(15)
 
@@ -60,6 +59,7 @@ export default function GuruPage() {
         try {
             if (editing) {
                 await supabase.from('teachers').update(payload).eq('id', editing.id)
+                showAlert({ type: 'success', title: 'Berhasil', message: 'Data guru berhasil diperbarui.' })
             } else {
                 // Buat user di Auth terlebih dahulu via Edge Function yg kita buat
                 const res = await fetch('/api/admin/create-user', {
@@ -85,11 +85,12 @@ export default function GuruPage() {
                     ...payload,
                     user_id: authData.user.id
                 })
+                showAlert({ type: 'success', title: 'Berhasil', message: 'Data guru berhasil ditambahkan.' })
             }
             setModalOpen(false)
             loadData()
         } catch (error: any) {
-            alert(`Error: ${error.message}`)
+            showAlert({ type: 'error', title: 'Gagal Menyimpan', message: error.message })
             console.error(error)
         } finally {
             setSaving(false)
@@ -97,9 +98,23 @@ export default function GuruPage() {
     }
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Hapus data guru ini?')) return
-        await supabase.from('teachers').delete().eq('id', id)
-        loadData()
+        const confirmed = await showConfirm({
+            title: 'Hapus Data Guru',
+            message: 'Apakah Anda yakin ingin menghapus data guru ini? Tindakan ini tidak dapat dibatalkan.'
+        })
+        if (!confirmed) return
+        
+        try {
+            showAlert({ type: 'loading', title: 'Menghapus', message: 'Sedang menghapus data...' })
+            const { error } = await supabase.from('teachers').delete().eq('id', id)
+            if (error) throw error
+            
+            showAlert({ type: 'success', title: 'Berhasil', message: 'Data guru berhasil dihapus.' })
+            loadData()
+        } catch (error: any) {
+            console.error('Error deleting teacher:', error)
+            showAlert({ type: 'error', title: 'Gagal Menghapus', message: error.message || 'Terjadi kesalahan saat menghapus data guru.' })
+        }
     }
 
     const downloadTemplate = () => {
@@ -117,11 +132,11 @@ export default function GuruPage() {
         if (!file) return
 
         setImporting(true)
-        setAlertConfig({ open: true, type: 'loading', title: 'Mengimpor Data', message: 'Memproses file Excel...' })
+        showAlert({ type: 'loading', title: 'Mengimpor Data', message: 'Memproses file Excel...' })
 
         const reader = new FileReader()
         reader.onerror = () => {
-            setAlertConfig({ open: true, type: 'error', title: 'Gagal Membaca File', message: 'File Excel tidak dapat dibaca oleh browser.' })
+            showAlert({ type: 'error', title: 'Gagal Membaca File', message: 'File Excel tidak dapat dibaca oleh browser.' })
             setImporting(false)
             if (fileInputRef.current) fileInputRef.current.value = ''
         }
@@ -171,7 +186,7 @@ export default function GuruPage() {
 
                 if (errors.length > 0) {
                     const errorMsg = 'Harap perbaiki file Excel Anda:\n\n' + errors.slice(0, 5).join('\n') + (errors.length > 5 ? '\n...dan lainnya' : '')
-                    setAlertConfig({ open: true, type: 'error', title: 'Data Tidak Sesuai', message: errorMsg })
+                    showAlert({ type: 'error', title: 'Data Tidak Sesuai', message: errorMsg })
                     return
                 }
 
@@ -220,17 +235,17 @@ export default function GuruPage() {
                     }
 
                     if (successCount > 0) {
-                        setAlertConfig({ open: true, type: 'success', title: 'Selesai', message: `${successCount} data guru berhasil diimpor & dibuat akunnya. ${errorCount > 0 ? `(${errorCount} gagal)` : ''}` })
+                        showAlert({ type: 'success', title: 'Selesai', message: `${successCount} data guru berhasil diimpor & dibuat akunnya. ${errorCount > 0 ? `(${errorCount} gagal)` : ''}` })
                         loadData()
                     } else {
-                        setAlertConfig({ open: true, type: 'error', title: 'Gagal Mengimpor', message: 'Semua data gagal diimpor. Pastikan Email belum terdaftar sebelumnya.' })
+                        showAlert({ type: 'error', title: 'Gagal Mengimpor', message: 'Semua data gagal diimpor. Pastikan Email belum terdaftar sebelumnya.' })
                     }
                 } else {
-                    setAlertConfig({ open: true, type: 'error', title: 'Format Tidak Valid', message: 'Tidak ada data valid untuk diimpor.' })
+                    showAlert({ type: 'error', title: 'Format Tidak Valid', message: 'Tidak ada data valid untuk diimpor.' })
                 }
             } catch (err) {
                 console.error('Error parsing Excel:', err)
-                setAlertConfig({ open: true, type: 'error', title: 'Gagal Membaca File', message: 'Terjadi kesalahan saat membaca file Excel.' })
+                showAlert({ type: 'error', title: 'Gagal Membaca File', message: 'Terjadi kesalahan saat membaca file Excel.' })
             } finally {
                 setImporting(false)
                 if (fileInputRef.current) fileInputRef.current.value = ''
@@ -346,10 +361,6 @@ export default function GuruPage() {
                 </div>
             </Modal>
 
-            <AlertModal
-                {...alertConfig}
-                onClose={() => setAlertConfig(prev => ({ ...prev, open: false }))}
-            />
         </div>
     )
 }
